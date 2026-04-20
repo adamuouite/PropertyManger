@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - Shared Date Formatter
+
+extension DateFormatter {
+    /// App-wide display format: DD/MM/YYYY
+    static let display: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "dd/MM/yyyy"
+        return f
+    }()
+}
+
 // MARK: - Language Enum
 
 enum AppLanguage: String, CaseIterable, Identifiable {
@@ -7,14 +18,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case german = "de"
 
     var id: String { rawValue }
-
     var displayName: String {
-        switch self {
-        case .english: return "English"
-        case .german:  return "Deutsch"
+            switch self {
+            case .english: return "EN"
+            case .german:  return "DE"
+            }
         }
-    }
-
     var flag: String {
         switch self {
         case .english: return "🇬🇧"
@@ -53,6 +62,14 @@ final class LocalizationManager {
         "nav.rents": "Rent Tracking",
         "nav.settings": "Settings",
         "nav.property": "Property",
+
+        // Company
+        "company.title": "Company",
+        "company.all": "All Companies",
+        "company.1111immo": "1111 Immobilien",
+        "company.1111holding": "1111 Holding",
+        "company.sherman": "Sherman Immobilien",
+        "company.privat": "Private",
 
         // Common
         "common.save": "Save",
@@ -160,6 +177,16 @@ final class LocalizationManager {
         "tenant.remove_doc_confirm": "Remove attached ID document?",
         "tenant.remove_doc_msg": "The file will be deleted from ~/Documents/PropertyManager/TenantDocs/. This cannot be undone.",
         "tenant.register": "Register",
+        "tenant.archive": "Archive Tenant",
+        "tenant.archive_confirm": "Archive %@?",
+        "tenant.archive_msg": "The tenant will be archived and their active contracts terminated. Data is preserved.",
+        "tenant.bulk_archive": "Archive %d tenants?",
+        "tenant.bulk_archive_msg": "Selected tenants will be archived and their active contracts terminated.",
+        "tenant.bulk_delete": "Delete %d tenants?",
+        "tenant.bulk_delete_msg": "This cannot be undone. ID documents and contract links will be removed.",
+        "tenant.show_archived": "Show Archived",
+        "tenant.archived_badge": "Archived",
+        "tenant.select_mode": "Select",
 
         // Contracts
         "contract.title": "Contracts",
@@ -172,8 +199,10 @@ final class LocalizationManager {
         "contract.delete_msg": "All associated payment records will also be deleted.",
         "contract.number": "Contract number",
         "contract.type": "Type",
-        "contract.type.tenant": "Tenant",
-        "contract.type.landlord": "Landlord",
+        "contract.category": "Category",
+        "contract.category.mietvertrag": "Rental Agreement",
+        "contract.category.verwaltungsvertrag": "Management Agreement",
+        "contract.all_categories": "All Categories",
         "contract.status": "Status",
         "contract.status.active": "Active",
         "contract.status.pending": "Pending",
@@ -208,6 +237,15 @@ final class LocalizationManager {
         "contract.show_finder": "Show in Finder",
         "contract.all_types": "All Types",
         "contract.all_status": "All Status",
+        "contract.terminate": "Terminate Contract",
+        "contract.terminate_confirm": "Terminate %@?",
+        "contract.terminate_msg": "The contract will be marked as terminated. Payment history is preserved.",
+        "contract.bulk_terminate": "Terminate %d contracts?",
+        "contract.bulk_terminate_msg": "Selected contracts will be marked as terminated.",
+        "contract.bulk_delete": "Delete %d contracts?",
+        "contract.bulk_delete_msg": "This cannot be undone. Payment history will also be deleted.",
+        "contract.show_terminated": "Show Terminated",
+        "contract.select_mode": "Select",
 
         // Rents
         "rent.title": "Rent Tracking",
@@ -219,6 +257,12 @@ final class LocalizationManager {
         "rent.delete_confirm": "Delete this payment?",
         "rent.delete_msg": "This payment record will be permanently deleted.",
         "rent.mark_paid": "Mark Paid",
+        "rent.direction": "Direction",
+        "rent.income": "Income",
+        "rent.expense": "Expense",
+        "rent.select_mode": "Select",
+        "rent.bulk_delete": "Delete %d payments?",
+        "rent.bulk_delete_msg": "These payment records will be permanently deleted.",
         "rent.monthly_overview": "Monthly Overview",
         "rent.no_data": "No payment data",
         "rent.filter_contract": "Filter by Contract",
@@ -293,6 +337,9 @@ final class LocalizationManager {
         "export.h.city": "City",
         "export.h.postal": "Postal Code",
         "export.h.type": "Type",
+        "export.h.company": "Company",
+        "export.h.category": "Category",
+        "export.h.direction": "Direction",
         "export.h.rooms": "Rooms",
         "export.h.area": "Area (m2)",
         "export.h.monthly_rent": "Monthly Rent",
@@ -323,6 +370,8 @@ final class LocalizationManager {
         "dash.no_apartments": "No apartments yet",
         "dash.no_apartments_desc": "Register apartments to see their status breakdown.",
         "dash.alerts": "Alerts & Follow-Ups",
+        "dash.company_performance": "Company Performance",
+        "dash.company_revenue": "%@ Revenue (Last 12 Months)",
         "dash.contract_expires": "Contract %@ for %@ expires on %@",
         "dash.overdue_payment": "Overdue payment of %@ for %@",
 
@@ -371,6 +420,7 @@ final class LocalizationManager {
 
         // CSV Import
         "csv.title": "Import from CSV / Excel",
+        "csv.company": "Company",
         "csv.apt_columns": "Apartment columns",
         "csv.tenant_columns": "Tenant Columns",
         "csv.tenant_columns_desc": "Tenant columns (optional — will be created and linked automatically)",
@@ -393,6 +443,21 @@ final class LocalizationManager {
         "csv.error.read": "Could not read file. Try saving as UTF-8 CSV from Excel.",
         "csv.error.empty": "File appears empty.",
         "csv.error.rows": "CSV needs at least a header row and one data row.",
+        "csv.duplicates_skipped": "%d duplicates skipped",
+        "csv.duplicate_skip": "Skip",
+        "csv.duplicate_update": "Update",
+        "csv.resolve_duplicates": "Resolve Duplicates",
+        "csv.skip_all": "Skip All",
+        "csv.update_all": "Update All",
+        "csv.conflict_count": "%d duplicate(s) found",
+        "csv.confirm_import": "Confirm Import",
+        "csv.contract_category": "Contract Type",
+
+        // Sync
+        "settings.sync": "Sync",
+        "settings.sync.active": "iCloud sync active",
+        "settings.sync.inactive": "iCloud not available",
+        "settings.sync.location": "Store location",
 
         // Login
         "login.title": "Property Manager",
@@ -418,6 +483,14 @@ final class LocalizationManager {
         "nav.property": "Immobilien",
 
         // Common
+        // Company
+        "company.title": "Unternehmen",
+        "company.all": "Alle Unternehmen",
+        "company.1111immo": "1111 Immobilien",
+        "company.1111holding": "1111 Holding",
+        "company.sherman": "Sherman Immobilien",
+        "company.privat": "Privat",
+
         "common.save": "Speichern",
         "common.cancel": "Abbrechen",
         "common.delete": "Löschen",
@@ -523,6 +596,16 @@ final class LocalizationManager {
         "tenant.remove_doc_confirm": "Angehängtes Dokument entfernen?",
         "tenant.remove_doc_msg": "Die Datei wird aus ~/Documents/PropertyManager/TenantDocs/ gelöscht. Dies kann nicht rückgängig gemacht werden.",
         "tenant.register": "Registrieren",
+        "tenant.archive": "Mieter archivieren",
+        "tenant.archive_confirm": "%@ archivieren?",
+        "tenant.archive_msg": "Der Mieter wird archiviert und aktive Verträge werden gekündigt. Daten bleiben erhalten.",
+        "tenant.bulk_archive": "%d Mieter archivieren?",
+        "tenant.bulk_archive_msg": "Ausgewählte Mieter werden archiviert und ihre aktiven Verträge gekündigt.",
+        "tenant.bulk_delete": "%d Mieter löschen?",
+        "tenant.bulk_delete_msg": "Dies kann nicht rückgängig gemacht werden. Ausweisdokumente und Vertragsverknüpfungen werden entfernt.",
+        "tenant.show_archived": "Archivierte anzeigen",
+        "tenant.archived_badge": "Archiviert",
+        "tenant.select_mode": "Auswählen",
 
         // Contracts
         "contract.title": "Verträge",
@@ -535,8 +618,10 @@ final class LocalizationManager {
         "contract.delete_msg": "Alle zugehörigen Zahlungseinträge werden ebenfalls gelöscht.",
         "contract.number": "Vertragsnummer",
         "contract.type": "Typ",
-        "contract.type.tenant": "Mieter",
-        "contract.type.landlord": "Vermieter",
+        "contract.category": "Kategorie",
+        "contract.category.mietvertrag": "Mietvertrag",
+        "contract.category.verwaltungsvertrag": "Verwaltungsvertrag",
+        "contract.all_categories": "Alle Kategorien",
         "contract.status": "Status",
         "contract.status.active": "Aktiv",
         "contract.status.pending": "Ausstehend",
@@ -571,6 +656,15 @@ final class LocalizationManager {
         "contract.show_finder": "Im Finder anzeigen",
         "contract.all_types": "Alle Typen",
         "contract.all_status": "Alle Status",
+        "contract.terminate": "Vertrag kündigen",
+        "contract.terminate_confirm": "%@ kündigen?",
+        "contract.terminate_msg": "Der Vertrag wird als gekündigt markiert. Zahlungshistorie bleibt erhalten.",
+        "contract.bulk_terminate": "%d Verträge kündigen?",
+        "contract.bulk_terminate_msg": "Ausgewählte Verträge werden als gekündigt markiert.",
+        "contract.bulk_delete": "%d Verträge löschen?",
+        "contract.bulk_delete_msg": "Dies kann nicht rückgängig gemacht werden. Zahlungshistorie wird ebenfalls gelöscht.",
+        "contract.show_terminated": "Gekündigte anzeigen",
+        "contract.select_mode": "Auswählen",
 
         // Rents
         "rent.title": "Mietverwaltung",
@@ -582,6 +676,12 @@ final class LocalizationManager {
         "rent.delete_confirm": "Diese Zahlung löschen?",
         "rent.delete_msg": "Dieser Zahlungseintrag wird dauerhaft gelöscht.",
         "rent.mark_paid": "Als bezahlt",
+        "rent.direction": "Richtung",
+        "rent.income": "Einnahme",
+        "rent.expense": "Ausgabe",
+        "rent.select_mode": "Auswählen",
+        "rent.bulk_delete": "%d Zahlungen löschen?",
+        "rent.bulk_delete_msg": "Diese Zahlungseinträge werden dauerhaft gelöscht.",
         "rent.monthly_overview": "Monatsübersicht",
         "rent.no_data": "Keine Zahlungsdaten",
         "rent.filter_contract": "Nach Vertrag filtern",
@@ -656,6 +756,9 @@ final class LocalizationManager {
         "export.h.city": "Stadt",
         "export.h.postal": "PLZ",
         "export.h.type": "Typ",
+        "export.h.company": "Unternehmen",
+        "export.h.category": "Kategorie",
+        "export.h.direction": "Richtung",
         "export.h.rooms": "Zimmer",
         "export.h.area": "Fläche (m2)",
         "export.h.monthly_rent": "Monatsmiete",
@@ -686,6 +789,8 @@ final class LocalizationManager {
         "dash.no_apartments": "Noch keine Wohnungen",
         "dash.no_apartments_desc": "Registrieren Sie Wohnungen, um die Statusübersicht zu sehen.",
         "dash.alerts": "Hinweise & Nachverfolgung",
+        "dash.company_performance": "Unternehmens-Performance",
+        "dash.company_revenue": "%@ Einnahmen (Letzte 12 Monate)",
         "dash.contract_expires": "Vertrag %@ für %@ läuft am %@ aus",
         "dash.overdue_payment": "Überfällige Zahlung von %@ für %@",
 
@@ -734,6 +839,7 @@ final class LocalizationManager {
 
         // CSV Import
         "csv.title": "Aus CSV / Excel importieren",
+        "csv.company": "Unternehmen",
         "csv.apt_columns": "Wohnungsspalten",
         "csv.tenant_columns": "Mieterspalten",
         "csv.tenant_columns_desc": "Mieterspalten (optional — werden automatisch erstellt und verknüpft)",
@@ -756,6 +862,21 @@ final class LocalizationManager {
         "csv.error.read": "Datei konnte nicht gelesen werden. Speichern Sie als UTF-8 CSV aus Excel.",
         "csv.error.empty": "Datei ist leer.",
         "csv.error.rows": "CSV benötigt mindestens eine Kopfzeile und eine Datenzeile.",
+        "csv.duplicates_skipped": "%d Duplikate übersprungen",
+        "csv.duplicate_skip": "Überspringen",
+        "csv.duplicate_update": "Aktualisieren",
+        "csv.resolve_duplicates": "Duplikate auflösen",
+        "csv.skip_all": "Alle überspringen",
+        "csv.update_all": "Alle aktualisieren",
+        "csv.conflict_count": "%d Duplikat(e) gefunden",
+        "csv.confirm_import": "Import bestätigen",
+        "csv.contract_category": "Vertragsart",
+
+        // Sync
+        "settings.sync": "Synchronisation",
+        "settings.sync.active": "iCloud-Sync aktiv",
+        "settings.sync.inactive": "iCloud nicht verfügbar",
+        "settings.sync.location": "Speicherort",
 
         // Login
         "login.title": "Immobilienverwaltung",

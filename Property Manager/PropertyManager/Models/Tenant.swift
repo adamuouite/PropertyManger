@@ -14,6 +14,8 @@ final class Tenant {
     var createdAt: Date = Date()
     /// Filename of attached ID document (image or PDF) stored in ~/Documents/PropertyManager/TenantDocs/
     var idDocumentFilename: String? = nil
+    var isArchived: Bool = false
+    var archivedAt: Date? = nil
 
     @Relationship(deleteRule: .nullify) var contracts: [Contract] = []
 

@@ -17,6 +17,7 @@ struct ExportReportView: View {
     @State private var dateTo: Date = Date()
     @State private var statusFilter: PaymentStatus? = nil
     @State private var selectedApartment: Apartment? = nil
+    @State private var selectedCompany: Company? = nil
     @State private var exportFormat: ExportFormat = .csv
     @State private var exportSuccess: String? = nil
     @State private var exportError: String? = nil
@@ -52,7 +53,9 @@ struct ExportReportView: View {
             let matchStatus = statusFilter == nil || p.status == statusFilter
             let matchApt = selectedApartment == nil
                 || p.contract?.apartment?.persistentModelID == selectedApartment?.persistentModelID
-            return inRange && matchStatus && matchApt
+            let matchCompany = selectedCompany == nil
+                || p.contract?.apartment?.company == selectedCompany
+            return inRange && matchStatus && matchApt && matchCompany
         }
         .sorted { ($0.year, $0.month) < ($1.year, $1.month) }
     }
@@ -117,6 +120,14 @@ struct ExportReportView: View {
                             // Filters
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(loc.t("export.filters")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+
+                                Picker(loc.t("company.title"), selection: $selectedCompany) {
+                                    Text(loc.t("company.all")).tag(Optional<Company>.none)
+                                    ForEach(Company.allCases, id: \.self) { c in
+                                        Text(c.rawValue).tag(Optional(c))
+                                    }
+                                }
+                                .font(.caption)
 
                                 Picker(loc.t("contract.apartment"), selection: $selectedApartment) {
                                     Text(loc.t("export.all_apartments")).tag(Optional<Apartment>.none)
@@ -244,14 +255,15 @@ struct ExportReportView: View {
 
     func generatePaymentLines(sep: String) -> [String] {
         var lines: [String] = []
-        lines.append([loc.t("export.h.month"), loc.t("export.h.year"), loc.t("export.h.tenant"),
+        lines.append([loc.t("export.h.month"), loc.t("export.h.year"), loc.t("export.h.company"),
+                       loc.t("export.h.tenant"),
                        loc.t("export.h.tenant_no"), loc.t("export.h.apartment"), loc.t("export.h.contract"),
+                       loc.t("export.h.direction"),
                        loc.t("export.h.amount_due"), loc.t("export.h.amount_paid"), loc.t("export.h.status"),
                        loc.t("export.h.due_date"), loc.t("export.h.paid_date"), loc.t("export.h.notes")]
             .joined(separator: sep))
 
-        let df = DateFormatter()
-        df.dateStyle = .short
+        let df = DateFormatter.display
 
         for p in filteredPayments {
             let tenant = p.contract?.tenant
@@ -259,10 +271,12 @@ struct ExportReportView: View {
             let row = [
                 p.monthName,
                 String(p.year),
+                apt?.company.rawValue ?? "",
                 tenant?.fullName ?? "",
                 tenant?.tenantNumber ?? "",
                 apt?.displayName ?? "",
                 p.contract?.contractNumber ?? "",
+                p.isExpense ? loc.t("rent.expense") : loc.t("rent.income"),
                 String(format: "%.2f", p.amount),
                 String(format: "%.2f", p.paidAmount),
                 p.status.rawValue,
@@ -312,17 +326,17 @@ struct ExportReportView: View {
         var lines: [String] = []
         lines.append([loc.t("export.h.apartment"), loc.t("export.h.street"), loc.t("export.h.gate"),
                        loc.t("export.h.top"), loc.t("export.h.city"), loc.t("export.h.postal"),
-                       loc.t("export.h.type"), loc.t("export.h.status"), loc.t("export.h.rooms"),
+                       loc.t("export.h.type"), loc.t("export.h.company"), loc.t("export.h.status"), loc.t("export.h.rooms"),
                        loc.t("export.h.area"), loc.t("export.h.monthly_rent"),
                        loc.t("export.h.active_tenants"), loc.t("export.h.total_contracts"),
                        loc.t("export.h.total_received")]
             .joined(separator: sep))
 
         for apt in apartments {
-            let totalReceived = apt.contracts
-                .flatMap { $0.rentPayments }
-                .filter { $0.status == .paid || $0.status == .partial }
-                .reduce(0.0) { $0 + $1.paidAmount }
+                   let paidPayments: [RentPayment] = apt.contracts
+                       .flatMap { $0.rentPayments }
+                       .filter { $0.status == .paid || $0.status == .partial }
+                   let totalReceived: Double = paidPayments.reduce(0.0) { $0 + $1.paidAmount }
             let row = [
                 apt.displayName,
                 apt.street,
@@ -330,7 +344,7 @@ struct ExportReportView: View {
                 apt.apartmentNumber,
                 apt.city,
                 apt.postalCode,
-                apt.type.rawValue,
+                apt.type.rawValue, apt.company.rawValue,
                 apt.status.rawValue,
                 String(apt.rooms),
                 String(format: "%.1f", apt.area),
@@ -346,10 +360,9 @@ struct ExportReportView: View {
 
     func generateContractOverviewLines(sep: String) -> [String] {
         var lines: [String] = []
-        let df = DateFormatter()
-        df.dateStyle = .short
+        let df = DateFormatter.display
 
-        lines.append([loc.t("export.h.contract_no"), loc.t("export.h.type"), loc.t("export.h.status"),
+        lines.append([loc.t("export.h.contract_no"), loc.t("export.h.category"), loc.t("export.h.company"), loc.t("export.h.status"),
                        loc.t("export.h.apartment"), loc.t("export.h.tenant"), loc.t("export.h.tenant_no"),
                        loc.t("export.h.start_date"), loc.t("export.h.end_date"), loc.t("export.h.monthly_rent"),
                        loc.t("export.h.deposit"), loc.t("export.h.duration"),
@@ -363,7 +376,7 @@ struct ExportReportView: View {
                 .reduce(0.0) { $0 + $1.paidAmount }
             let row = [
                 c.contractNumber,
-                c.type.rawValue,
+                c.category.rawValue, c.apartment?.company.rawValue ?? "",
                 c.status.rawValue,
                 c.apartment?.displayName ?? "",
                 c.tenant?.fullName ?? "",

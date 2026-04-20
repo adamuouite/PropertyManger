@@ -1,6 +1,22 @@
 import SwiftData
 import Foundation
 
+enum Company: String, Codable, CaseIterable {
+    case elfElfImmobilien = "1111 Immobilien"
+    case elfElfHolding = "1111 Holding"
+    case shermanImmobilien = "Sherman Immobilien"
+    case privat = "Privat"
+
+    var icon: String {
+        switch self {
+        case .elfElfImmobilien: return "building.2.fill"
+        case .elfElfHolding: return "building.columns.fill"
+        case .shermanImmobilien: return "house.lodge.fill"
+        case .privat: return "person.fill"
+        }
+    }
+}
+
 enum ApartmentType: String, Codable, CaseIterable {
     case standard = "Standard"
     case wg = "WG"
@@ -55,6 +71,7 @@ final class Apartment {
     var statusRaw: String = ApartmentStatus.available.rawValue
     var typeRaw: String = ApartmentType.standard.rawValue
     var maxTenants: Int = 1
+    var companyRaw: String = Company.privat.rawValue
     var notes: String = ""
     var createdAt: Date = Date()
 
@@ -87,6 +104,11 @@ final class Apartment {
     var type: ApartmentType {
         get { ApartmentType(rawValue: typeRaw) ?? .standard }
         set { typeRaw = newValue.rawValue }
+    }
+
+    var company: Company {
+        get { Company(rawValue: companyRaw) ?? .privat }
+        set { companyRaw = newValue.rawValue }
     }
 
     var isWG: Bool { type == .wg }
@@ -127,6 +149,7 @@ final class Apartment {
         rentPrice: Double = 0,
         status: ApartmentStatus = .available,
         type: ApartmentType = .standard,
+        company: Company = .privat,
         maxTenants: Int = 1,
         notes: String = ""
     ) {
@@ -143,6 +166,7 @@ final class Apartment {
         self.rentPrice = rentPrice
         self.statusRaw = status.rawValue
         self.typeRaw = type.rawValue
+        self.companyRaw = company.rawValue
         self.maxTenants = maxTenants
         self.notes = notes
         self.createdAt = Date()

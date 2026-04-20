@@ -26,9 +26,12 @@ final class RentPayment {
     var statusRaw: String = PaymentStatus.pending.rawValue
     var month: Int = 1
     var year: Int = 2026
+    var isExpense: Bool = false
     var notes: String = ""
 
     @Relationship(inverse: \Contract.rentPayments) var contract: Contract?
+
+    var effectiveAmount: Double { isExpense ? -amount : amount }
 
     var status: PaymentStatus {
         get { PaymentStatus(rawValue: statusRaw) ?? .pending }

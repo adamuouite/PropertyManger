@@ -17,6 +17,9 @@ struct RentsView: View {
     @State private var showExport = false
     @State private var editPayment: RentPayment?
     @State private var deleteTarget: RentPayment?
+    @State private var isSelectMode = false
+    @State private var multiSelection = Set<PersistentIdentifier>()
+    @State private var showBulkDeleteConfirm = false
 
     var canEdit: Bool { authManager.canPerform(.managePayments) }
 
@@ -34,9 +37,9 @@ struct RentsView: View {
         return grouped.sorted { $0.key < $1.key }.suffix(6).map { _, items in
             let month = items[0].month
             let year = items[0].year
-            let paid = items.filter { $0.status == .paid }.reduce(0) { $0 + $1.paidAmount }
-            let pending = items.filter { $0.status == .pending }.reduce(0) { $0 + $1.amount }
-            let overdue = items.filter { $0.status == .overdue }.reduce(0) { $0 + $1.amount }
+            let paid = items.filter { $0.status == .paid }.reduce(0) { $0 + ($1.isExpense ? -$1.paidAmount : $1.paidAmount) }
+            let pending = items.filter { $0.status == .pending }.reduce(0) { $0 + ($1.isExpense ? -$1.amount : $1.amount) }
+            let overdue = items.filter { $0.status == .overdue }.reduce(0) { $0 + ($1.isExpense ? -$1.amount : $1.amount) }
             return (label: "\(month)/\(year)", paid: paid, pending: pending, overdue: overdue)
         }
     }
@@ -131,11 +134,36 @@ struct RentsView: View {
                         .font(.headline)
                     Spacer()
                     if canEdit {
-                        Button { showAddPayment = true } label: {
-                            Label(loc.t("rent.add"), systemImage: "plus")
+                        if isSelectMode {
+                            Button {
+                                if multiSelection.count == filteredPayments.count {
+                                    multiSelection.removeAll()
+                                } else {
+                                    multiSelection = Set(filteredPayments.map(\.persistentModelID))
+                                }
+                            } label: {
+                                Text(multiSelection.count == filteredPayments.count ? loc.t("common.deselect_all") : loc.t("common.select_all"))
+                            }.buttonStyle(.bordered).font(.caption)
+
+                            if !multiSelection.isEmpty {
+                                Button(role: .destructive) { showBulkDeleteConfirm = true } label: {
+                                    Label("\(loc.t("common.delete")) (\(multiSelection.count))", systemImage: "trash.fill")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.borderedProminent).tint(.red)
+                            }
+                            Button(loc.t("common.done")) { isSelectMode = false; multiSelection.removeAll() }
+                                .buttonStyle(.bordered).font(.caption)
+                        } else {
+                            Button { isSelectMode = true } label: {
+                                Label(loc.t("rent.select_mode"), systemImage: "checkmark.circle")
+                            }.buttonStyle(.bordered)
+                            Button { showAddPayment = true } label: {
+                                Label(loc.t("rent.add"), systemImage: "plus")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(contracts.isEmpty)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(contracts.isEmpty)
                     }
                 }
                 .padding(16)
@@ -152,7 +180,20 @@ struct RentsView: View {
                 } else {
                     List {
                         ForEach(filteredPayments) { payment in
-                            PaymentRow(payment: payment, canEdit: canEdit, onEdit: { editPayment = payment })
+                            HStack(spacing: 8) {
+                                if isSelectMode {
+                                    Image(systemName: multiSelection.contains(payment.persistentModelID) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(multiSelection.contains(payment.persistentModelID) ? Color.accentColor : .secondary)
+                                        .onTapGesture {
+                                            if multiSelection.contains(payment.persistentModelID) {
+                                                multiSelection.remove(payment.persistentModelID)
+                                            } else {
+                                                multiSelection.insert(payment.persistentModelID)
+                                            }
+                                        }
+                                }
+                                PaymentRow(payment: payment, canEdit: canEdit, onEdit: { editPayment = payment })
+                            }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                     if canEdit {
                                         Button(role: .destructive) {
@@ -201,6 +242,16 @@ struct RentsView: View {
                 }
             }
         } message: { Text(loc.t("rent.delete_msg")) }
+        .confirmationDialog(String(format: loc.t("rent.bulk_delete"), multiSelection.count),
+            isPresented: $showBulkDeleteConfirm, titleVisibility: .visible) {
+            Button(loc.t("common.delete"), role: .destructive) {
+                for payment in allPayments where multiSelection.contains(payment.persistentModelID) {
+                    modelContext.delete(payment)
+                }
+                try? modelContext.save()
+                multiSelection.removeAll(); isSelectMode = false
+            }
+        } message: { Text(loc.t("rent.bulk_delete_msg")) }
     }
 
     private func markAsPaid(_ payment: RentPayment) {
@@ -229,11 +280,24 @@ struct PaymentRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(payment.monthName).font(.headline)
+                    if payment.isExpense {
+                        Text(loc.t("rent.expense"))
+                            .font(.caption2.bold()).foregroundStyle(.white)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(.red).clipShape(Capsule())
+                    }
                     Spacer()
-                    Text(payment.amount.formatted(.currency(code: "EUR")))
+                    Text((payment.isExpense ? "−" : "") + payment.amount.formatted(.currency(code: "EUR")))
                         .font(.headline.bold())
+                        .foregroundStyle(payment.isExpense ? .red : .primary)
                 }
                 HStack(spacing: 6) {
+                    if let company = payment.contract?.apartment?.company {
+                        Text(company.rawValue)
+                            .font(.caption2.bold()).foregroundStyle(.white)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(companyColor(company)).clipShape(Capsule())
+                    }
                     if let tenant = payment.contract?.tenant, !tenant.tenantNumber.isEmpty {
                         Text(tenant.tenantNumber)
                             .font(.caption2.bold())
@@ -245,10 +309,10 @@ struct PaymentRow: View {
                         Text(contractNum).font(.caption).foregroundStyle(.secondary)
                         Text("·").foregroundStyle(.secondary)
                     }
-                    Text("\(loc.t("rent.due_date")): \(payment.dueDate.formatted(date: .abbreviated, time: .omitted))")
+                    Text("\(loc.t("rent.due_date")): \(DateFormatter.display.string(from: payment.dueDate))")
                         .font(.caption).foregroundStyle(.secondary)
                     if let paidDate = payment.paidDate {
-                        Text("· Paid: \(paidDate.formatted(date: .abbreviated, time: .omitted))")
+                        Text("· \(loc.t("rent.status.paid")): \(DateFormatter.display.string(from: paidDate))")
                             .font(.caption).foregroundStyle(.green)
                     }
                 }
@@ -300,6 +364,8 @@ struct AddEditPaymentView: View {
     @State private var status: PaymentStatus = .pending
     @State private var notes = ""
     @State private var hasPaidDate = false
+    @State private var isExpense = false
+    private let minDate = Calendar.current.date(from: DateComponents(year: 2020, month: 1, day: 1))!
 
     var isEditing: Bool { payment != nil }
     var isValid: Bool { amount > 0 && selectedContract != nil }
@@ -340,10 +406,15 @@ struct AddEditPaymentView: View {
                     Picker(loc.t("rent.year"), selection: $year) {
                         ForEach((2020...2035), id: \.self) { y in Text(String(y)).tag(y) }
                     }
-                    DatePicker(loc.t("rent.due_date"), selection: $dueDate, displayedComponents: .date)
+                    DatePicker(loc.t("rent.due_date"), selection: $dueDate, in: minDate..., displayedComponents: .date)
                 }
 
                 Section(loc.t("rent.payment_section")) {
+                    Picker(loc.t("rent.direction"), selection: $isExpense) {
+                        Label(loc.t("rent.income"), systemImage: "arrow.down.circle.fill").tag(false)
+                        Label(loc.t("rent.expense"), systemImage: "arrow.up.circle.fill").tag(true)
+                    }
+
                     HStack {
                         Text(loc.t("rent.amount") + " *")
                         Spacer()
@@ -378,7 +449,7 @@ struct AddEditPaymentView: View {
                         DatePicker(loc.t("rent.paid_on"), selection: Binding(
                             get: { paidDate ?? Date() },
                             set: { paidDate = $0 }
-                        ), displayedComponents: .date)
+                        ), in: minDate..., displayedComponents: .date)
                     }
                 }
 
@@ -394,6 +465,7 @@ struct AddEditPaymentView: View {
                 selectedContract = p.contract; amount = p.amount; paidAmount = p.paidAmount
                 dueDate = p.dueDate; paidDate = p.paidDate; month = p.month; year = p.year
                 status = p.status; notes = p.notes; hasPaidDate = p.paidDate != nil
+                isExpense = p.isExpense
             }
         }
     }
@@ -416,13 +488,13 @@ struct AddEditPaymentView: View {
 
         if let p = payment {
             p.contract = selectedContract; p.amount = amount
-            p.paidAmount = resolvedPaidAmount
+            p.paidAmount = resolvedPaidAmount; p.isExpense = isExpense
             p.dueDate = dueDate; p.paidDate = resolvedPaidDate
             p.month = month; p.year = year; p.status = status; p.notes = notes
         } else {
             let p = RentPayment(amount: amount, dueDate: dueDate, month: month, year: year, notes: notes)
             p.contract = selectedContract
-            p.status = status
+            p.status = status; p.isExpense = isExpense
             p.paidAmount = resolvedPaidAmount
             p.paidDate = resolvedPaidDate
             modelContext.insert(p)

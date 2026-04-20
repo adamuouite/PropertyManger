@@ -15,9 +15,15 @@ struct ContractsView: View {
     @State private var showAdd = false
     @State private var editContract: Contract?
     @State private var deleteTarget: Contract?
-    @State private var typeFilter: ContractType? = nil
+    @State private var companyFilter: Company? = nil
+    @State private var categoryFilter: ContractCategory? = nil
     @State private var statusFilter: ContractStatus? = nil
+    @State private var showTerminated = false
     @State private var search = ""
+    @State private var isSelectMode = false
+    @State private var multiSelection = Set<PersistentIdentifier>()
+    @State private var showBulkTerminateConfirm = false
+    @State private var showBulkDeleteConfirm = false
 
     var canEdit: Bool { authManager.canPerform(.manageContracts) }
 
@@ -27,16 +33,49 @@ struct ContractsView: View {
                 || c.contractNumber.localizedCaseInsensitiveContains(search)
                 || (c.apartment?.displayName ?? "").localizedCaseInsensitiveContains(search)
                 || (c.tenant?.fullName ?? "").localizedCaseInsensitiveContains(search)
-            let matchType = typeFilter == nil || c.type == typeFilter
-            let matchStatus = statusFilter == nil || c.status == statusFilter
-            return matchSearch && matchType && matchStatus
+            let matchCompany = companyFilter == nil || c.apartment?.company == companyFilter
+            let matchCategory = categoryFilter == nil || c.category == categoryFilter
+            let matchStatus = statusFilter == nil ? (showTerminated || c.status != .terminated) : c.status == statusFilter
+            return matchSearch && matchCompany && matchCategory && matchStatus
         }
     }
 
+    var selectedContracts: [Contract] {
+        contracts.filter { multiSelection.contains($0.persistentModelID) }
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
+        HSplitView {
             // MARK: Left Pane
             VStack(spacing: 0) {
+                // Select-mode toolbar
+                if isSelectMode {
+                    HStack(spacing: 6) {
+                        Button {
+                            multiSelection = multiSelection.count == filtered.count
+                                ? [] : Set(filtered.map { $0.persistentModelID })
+                        } label: {
+                            Text(multiSelection.count == filtered.count ? loc.t("common.deselect_all") : loc.t("common.select_all"))
+                                .font(.caption)
+                        }.buttonStyle(.bordered)
+                        Spacer()
+                        if !multiSelection.isEmpty {
+                            Button { showBulkTerminateConfirm = true } label: {
+                                Label(loc.t("contract.terminate"), systemImage: "xmark.circle")
+                                    .font(.caption)
+                            }.buttonStyle(.borderedProminent).tint(.orange)
+                            Button(role: .destructive) { showBulkDeleteConfirm = true } label: {
+                                Label("\(loc.t("common.delete")) (\(multiSelection.count))", systemImage: "trash.fill")
+                                    .font(.caption)
+                            }.buttonStyle(.borderedProminent).tint(.red)
+                        }
+                        Button(loc.t("common.done")) { isSelectMode = false; multiSelection.removeAll() }
+                            .buttonStyle(.bordered).font(.caption)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    Divider()
+                }
+
                 VStack(spacing: 8) {
                     HStack {
                         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -48,14 +87,24 @@ struct ContractsView: View {
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 4) {
-                            FilterChip(label: loc.t("contract.all_types"), selected: typeFilter == nil) { typeFilter = nil }
-                            ForEach(ContractType.allCases, id: \.self) { t in
-                                FilterChip(label: t.rawValue, selected: typeFilter == t) { typeFilter = t }
+                            FilterChip(label: loc.t("company.all"), selected: companyFilter == nil) { companyFilter = nil }
+                            ForEach(Company.allCases, id: \.self) { co in
+                                FilterChip(label: co.rawValue, selected: companyFilter == co) { companyFilter = co }
                             }
                             Divider().frame(height: 16)
-                            FilterChip(label: loc.t("contract.all_status"), selected: statusFilter == nil) { statusFilter = nil }
-                            ForEach(ContractStatus.allCases, id: \.self) { s in
+                            FilterChip(label: loc.t("contract.all_categories"), selected: categoryFilter == nil) { categoryFilter = nil }
+                            ForEach(ContractCategory.allCases, id: \.self) { cat in
+                                FilterChip(label: cat.rawValue, selected: categoryFilter == cat) { categoryFilter = cat }
+                            }
+                            Divider().frame(height: 16)
+                            FilterChip(label: loc.t("contract.all_status"), selected: statusFilter == nil && !showTerminated) {
+                                statusFilter = nil; showTerminated = false
+                            }
+                            ForEach(ContractStatus.allCases.filter { $0 != .terminated }, id: \.self) { s in
                                 FilterChip(label: s.rawValue, selected: statusFilter == s) { statusFilter = s }
+                            }
+                            FilterChip(label: loc.t("contract.show_terminated"), selected: showTerminated) {
+                                showTerminated.toggle(); statusFilter = nil
                             }
                         }
                     }
@@ -64,21 +113,46 @@ struct ContractsView: View {
 
                 Divider()
 
-                List(filtered, selection: $selectedContract) { c in
-                    ContractRow(contract: c).tag(c)
+                if isSelectMode {
+                    List(selection: $multiSelection) {
+                        ForEach(filtered) { c in
+                            HStack(spacing: 8) {
+                                Image(systemName: multiSelection.contains(c.persistentModelID) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(multiSelection.contains(c.persistentModelID) ? Color.accentColor : .secondary)
+                                    .onTapGesture {
+                                        if multiSelection.contains(c.persistentModelID) { multiSelection.remove(c.persistentModelID) }
+                                        else { multiSelection.insert(c.persistentModelID) }
+                                    }
+                                ContractRow(contract: c)
+                            }
+                        }
+                    }.listStyle(.plain)
+                } else {
+                    List(filtered, selection: $selectedContract) { c in
+                        ContractRow(contract: c).tag(c)
+                    }.listStyle(.plain)
                 }
-                .listStyle(.plain)
             }
-            .frame(width: 300)
-
-            Divider()
+            .frame(minWidth: 240, maxWidth: 400)
 
             // MARK: Right Pane
             Group {
-                if let c = selectedContract {
+                if isSelectMode {
+                    SelectionSummaryView(
+                        title: "\(selectedContracts.count) \(loc.t("contract.title"))",
+                        items: selectedContracts,
+                        nameFor: { $0.contractNumber },
+                        emptyHint: loc.t("contract.no_selection_desc"),
+                        softActionLabel: loc.t("contract.terminate"),
+                        softAction: { showBulkTerminateConfirm = true },
+                        deleteActionLabel: "\(loc.t("common.delete")) (\(selectedContracts.count))",
+                        deleteAction: { showBulkDeleteConfirm = true }
+                    )
+                } else if let c = selectedContract {
                     ContractDetail(contract: c, canEdit: canEdit,
                                    onEdit: { editContract = c },
-                                   onDelete: { deleteTarget = c })
+                                   onDelete: { deleteTarget = c },
+                                   onTerminate: { terminateContract(c) })
                 } else {
                     ContentUnavailableView(loc.t("contract.no_selection"), systemImage: "doc.text",
                                           description: Text(loc.t("contract.no_selection_desc")))
@@ -89,9 +163,14 @@ struct ContractsView: View {
         .navigationTitle(loc.t("contract.title"))
         .toolbar {
             if canEdit {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showAdd = true } label: {
-                        Label(loc.t("contract.add"), systemImage: "plus")
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if !isSelectMode {
+                        Button { isSelectMode = true } label: {
+                            Label(loc.t("contract.select_mode"), systemImage: "checkmark.circle")
+                        }
+                        Button { showAdd = true } label: {
+                            Label(loc.t("contract.add"), systemImage: "plus")
+                        }
                     }
                 }
             }
@@ -101,6 +180,9 @@ struct ContractsView: View {
         .confirmationDialog("\(loc.t("common.delete")) \(deleteTarget?.contractNumber ?? "")?",
                             isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
                             titleVisibility: .visible) {
+            Button(loc.t("contract.terminate"), role: .none) {
+                if let c = deleteTarget { terminateContract(c); deleteTarget = nil }
+            }
             Button(loc.t("common.delete"), role: .destructive) {
                 if let c = deleteTarget {
                     if selectedContract == c { selectedContract = nil }
@@ -108,6 +190,30 @@ struct ContractsView: View {
                 }
             }
         } message: { Text(loc.t("contract.delete_msg")) }
+        .confirmationDialog(String(format: loc.t("contract.bulk_terminate"), multiSelection.count),
+                            isPresented: $showBulkTerminateConfirm, titleVisibility: .visible) {
+            Button(loc.t("contract.terminate"), role: .none) {
+                for c in selectedContracts { c.status = .terminated }
+                try? modelContext.save()
+                multiSelection.removeAll(); isSelectMode = false
+            }
+        } message: { Text(loc.t("contract.bulk_terminate_msg")) }
+        .confirmationDialog(String(format: loc.t("contract.bulk_delete"), multiSelection.count),
+                            isPresented: $showBulkDeleteConfirm, titleVisibility: .visible) {
+            Button(loc.t("common.delete"), role: .destructive) {
+                for c in selectedContracts {
+                    if selectedContract == c { selectedContract = nil }
+                    modelContext.delete(c)
+                }
+                try? modelContext.save()
+                multiSelection.removeAll(); isSelectMode = false
+            }
+        } message: { Text(loc.t("contract.bulk_delete_msg")) }
+    }
+
+    private func terminateContract(_ c: Contract) {
+        c.status = .terminated
+        try? modelContext.save()
     }
 }
 
@@ -115,10 +221,11 @@ struct ContractsView: View {
 
 struct ContractRow: View {
     let contract: Contract
+    @Environment(\.loc) var loc
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Label(contract.contractNumber, systemImage: contract.type.icon)
+                Label(contract.contractNumber, systemImage: contract.category.icon)
                     .font(.headline)
                 Spacer()
                 StatusBadge(text: contract.status.rawValue, icon: contract.status.icon)
@@ -133,7 +240,7 @@ struct ContractRow: View {
                 Text(contract.rentAmount.formatted(.currency(code: "EUR")) + " " + loc.t("common.per_month"))
                     .font(.caption.bold()).foregroundStyle(.green)
                 Spacer()
-                Text("\(contract.startDate.formatted(date: .abbreviated, time: .omitted)) – \(contract.endDate.formatted(date: .abbreviated, time: .omitted))")
+                Text("\(DateFormatter.display.string(from: contract.startDate)) – \(DateFormatter.display.string(from: contract.endDate)")
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
@@ -148,6 +255,7 @@ struct ContractDetail: View {
     let canEdit: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
+    var onTerminate: (() -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.loc) var loc
@@ -160,9 +268,9 @@ struct ContractDetail: View {
                 // Header
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Label(contract.contractNumber, systemImage: contract.type.icon)
+                        Label(contract.contractNumber, systemImage: contract.category.icon)
                             .font(.largeTitle.bold())
-                        Text("\(loc.t("contract.type")): \(contract.type.rawValue)")
+                        Text(contract.fullTypeLabel)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -312,8 +420,8 @@ struct ContractDetail: View {
 
                 // Dates
                 InfoSection(title: loc.t("contract.period"), icon: "calendar") {
-                    InfoRow(label: loc.t("contract.start"), value: contract.startDate.formatted(date: .long, time: .omitted))
-                    InfoRow(label: loc.t("contract.end"), value: contract.endDate.formatted(date: .long, time: .omitted))
+                    InfoRow(label: loc.t("contract.start"), value: DateFormatter.display.string(from: contract.startDate))
+                    InfoRow(label: loc.t("contract.end"), value: DateFormatter.display.string(from: contract.endDate))
                     if contract.isExpiringSoon {
                         HStack {
                             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
@@ -351,6 +459,11 @@ struct ContractDetail: View {
                     Button { attachPDF() } label: { Label(loc.t("contract.attach_pdf"), systemImage: "paperclip") }
                         .help(loc.t("contract.attach_pdf_help"))
                     Button(action: onEdit) { Label(loc.t("common.edit"), systemImage: "pencil") }
+                    if let terminate = onTerminate, contract.status != .terminated {
+                        Button(action: terminate) {
+                            Label(loc.t("contract.terminate"), systemImage: "xmark.circle")
+                        }.foregroundStyle(.orange)
+                    }
                     Button(role: .destructive, action: onDelete) { Label(loc.t("common.delete"), systemImage: "trash") }
                         .foregroundStyle(.red)
                 }
@@ -384,10 +497,11 @@ struct AddEditContractView: View {
     let tenants: [Tenant]
 
     @State private var contractNumber = ""
-    @State private var type: ContractType = .tenant
+    @State private var category: ContractCategory = .mietvertrag
     @State private var status: ContractStatus = .active
     @State private var startDate = Date()
     @State private var endDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+    private let minDate = Calendar.current.date(from: DateComponents(year: 2020, month: 1, day: 1))!
     @State private var rentAmount = 0.0
     @State private var depositAmount = 0.0
     @State private var paymentDueDay = 1
@@ -415,8 +529,15 @@ struct AddEditContractView: View {
                 Form {
                     Section(loc.t("contract.title")) {
                         TextField(loc.t("contract.number") + " *", text: $contractNumber)
-                        Picker(loc.t("contract.type"), selection: $type) {
-                            ForEach(ContractType.allCases, id: \.self) { Label($0.rawValue, systemImage: $0.icon).tag($0) }
+                        Picker(loc.t("contract.category"), selection: $category) {
+                            ForEach(ContractCategory.allCases, id: \.self) { Label($0.rawValue, systemImage: $0.icon).tag($0) }
+                        }
+                        if let apt = selectedApartment {
+                            HStack {
+                                Text(loc.t("company.title")).foregroundStyle(.secondary)
+                                Spacer()
+                                Text(apt.company.rawValue).foregroundStyle(.secondary)
+                            }
                         }
                         Picker(loc.t("contract.status"), selection: $status) {
                             ForEach(ContractStatus.allCases, id: \.self) { Label($0.rawValue, systemImage: $0.icon).tag($0) }
@@ -424,8 +545,8 @@ struct AddEditContractView: View {
                     }
 
                     Section(loc.t("contract.dates")) {
-                        DatePicker(loc.t("contract.start"), selection: $startDate, displayedComponents: .date)
-                        DatePicker(loc.t("contract.end"), selection: $endDate, displayedComponents: .date)
+                        DatePicker(loc.t("contract.start"), selection: $startDate, in: minDate..., displayedComponents: .date)
+                        DatePicker(loc.t("contract.end"), selection: $endDate, in: minDate..., displayedComponents: .date)
                     }
 
                     Section(loc.t("contract.financials")) {
@@ -472,7 +593,7 @@ struct AddEditContractView: View {
         .frame(width: 540, height: 600)
         .onAppear {
             if let c = contract {
-                contractNumber = c.contractNumber; type = c.type; status = c.status
+                contractNumber = c.contractNumber; category = c.category; status = c.status
                 startDate = c.startDate; endDate = c.endDate; rentAmount = c.rentAmount
                 depositAmount = c.depositAmount; paymentDueDay = c.paymentDueDay
                 selectedApartment = c.apartment; selectedTenant = c.tenant; notes = c.notes
@@ -484,12 +605,12 @@ struct AddEditContractView: View {
 
     private func save() {
         if let c = contract {
-            c.contractNumber = contractNumber; c.type = type; c.status = status
+            c.contractNumber = contractNumber; c.category = category; c.status = status
             c.startDate = startDate; c.endDate = endDate; c.rentAmount = rentAmount
             c.depositAmount = depositAmount; c.paymentDueDay = paymentDueDay
             c.apartment = selectedApartment; c.tenant = selectedTenant; c.notes = notes
         } else {
-            let c = Contract(contractNumber: contractNumber, type: type,
+            let c = Contract(contractNumber: contractNumber, type: category,
                              startDate: startDate, endDate: endDate,
                              rentAmount: rentAmount, depositAmount: depositAmount,
                              paymentDueDay: paymentDueDay, notes: notes)

@@ -13,24 +13,62 @@ struct TenantsView: View {
     @State private var showAdd = false
     @State private var editTenant: Tenant?
     @State private var deleteTarget: Tenant?
+    @State private var archiveTarget: Tenant?
     @State private var search = ""
+    @State private var showArchived = false
+    @State private var isSelectMode = false
+    @State private var multiSelection = Set<PersistentIdentifier>()
+    @State private var showBulkArchiveConfirm = false
+    @State private var showBulkDeleteConfirm = false
 
     var canEdit: Bool { authManager.canPerform(.manageTenants) }
 
     var filtered: [Tenant] {
-        guard !search.isEmpty else { return tenants }
-        return tenants.filter {
-            $0.fullName.localizedCaseInsensitiveContains(search)
-            || $0.email.localizedCaseInsensitiveContains(search)
-            || $0.phone.localizedCaseInsensitiveContains(search)
-            || $0.tenantNumber.localizedCaseInsensitiveContains(search)
+        tenants.filter { t in
+            let matchArchived = showArchived ? t.isArchived : !t.isArchived
+            let matchSearch = search.isEmpty
+                || t.fullName.localizedCaseInsensitiveContains(search)
+                || t.email.localizedCaseInsensitiveContains(search)
+                || t.phone.localizedCaseInsensitiveContains(search)
+                || t.tenantNumber.localizedCaseInsensitiveContains(search)
+            return matchArchived && matchSearch
         }
     }
 
+    var selectedTenants: [Tenant] {
+        tenants.filter { multiSelection.contains($0.persistentModelID) }
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
+        HSplitView {
             // MARK: Left Pane
             VStack(spacing: 0) {
+                // Select-mode toolbar
+                if isSelectMode {
+                    HStack(spacing: 6) {
+                        Button {
+                            multiSelection = multiSelection.count == filtered.count
+                                ? [] : Set(filtered.map { $0.persistentModelID })
+                        } label: {
+                            Text(multiSelection.count == filtered.count ? loc.t("common.deselect_all") : loc.t("common.select_all"))
+                                .font(.caption)
+                        }.buttonStyle(.bordered)
+                        Spacer()
+                        if !multiSelection.isEmpty {
+                            Button { showBulkArchiveConfirm = true } label: {
+                                Label(loc.t("tenant.archive"), systemImage: "archivebox").font(.caption)
+                            }.buttonStyle(.borderedProminent).tint(.orange)
+                            Button(role: .destructive) { showBulkDeleteConfirm = true } label: {
+                                Label("\(loc.t("common.delete")) (\(multiSelection.count))", systemImage: "trash.fill").font(.caption)
+                            }.buttonStyle(.borderedProminent).tint(.red)
+                        }
+                        Button(loc.t("common.done")) { isSelectMode = false; multiSelection.removeAll() }
+                            .buttonStyle(.bordered).font(.caption)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    Divider()
+                }
+
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                     TextField(loc.t("tenant.search"), text: $search).textFieldStyle(.plain)
@@ -40,23 +78,56 @@ struct TenantsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .padding(10)
 
+                // Archive filter chip
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        FilterChip(label: loc.t("common.all"), selected: !showArchived) { showArchived = false }
+                        FilterChip(label: loc.t("tenant.show_archived"), selected: showArchived) { showArchived = true }
+                    }.padding(.horizontal, 10)
+                }.padding(.bottom, 6)
+
                 Divider()
 
-                List(filtered, selection: $selectedTenant) { tenant in
-                    TenantRow(tenant: tenant).tag(tenant)
+                if isSelectMode {
+                    List(selection: $multiSelection) {
+                        ForEach(filtered) { tenant in
+                            HStack(spacing: 8) {
+                                Image(systemName: multiSelection.contains(tenant.persistentModelID) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(multiSelection.contains(tenant.persistentModelID) ? Color.accentColor : .secondary)
+                                    .onTapGesture {
+                                        if multiSelection.contains(tenant.persistentModelID) { multiSelection.remove(tenant.persistentModelID) }
+                                        else { multiSelection.insert(tenant.persistentModelID) }
+                                    }
+                                TenantRow(tenant: tenant)
+                            }
+                        }
+                    }.listStyle(.plain)
+                } else {
+                    List(filtered, selection: $selectedTenant) { tenant in
+                        TenantRow(tenant: tenant).tag(tenant)
+                    }.listStyle(.plain)
                 }
-                .listStyle(.plain)
             }
-            .frame(width: 280)
-
-            Divider()
+            .frame(minWidth: 220, maxWidth: 360)
 
             // MARK: Right Pane
             Group {
-                if let tenant = selectedTenant {
+                if isSelectMode {
+                    SelectionSummaryView(
+                        title: "\(selectedTenants.count) \(loc.t("tenant.title"))",
+                        items: selectedTenants,
+                        nameFor: { $0.fullName },
+                        emptyHint: loc.t("tenant.no_selection_desc"),
+                        softActionLabel: loc.t("tenant.archive"),
+                        softAction: { showBulkArchiveConfirm = true },
+                        deleteActionLabel: "\(loc.t("common.delete")) (\(selectedTenants.count))",
+                        deleteAction: { showBulkDeleteConfirm = true }
+                    )
+                } else if let tenant = selectedTenant {
                     TenantDetail(tenant: tenant, canEdit: canEdit,
                                  onEdit: { editTenant = tenant },
-                                 onDelete: { deleteTarget = tenant })
+                                 onDelete: { deleteTarget = tenant },
+                                 onArchive: { archiveTarget = tenant })
                 } else {
                     ContentUnavailableView(loc.t("tenant.no_selection"), systemImage: "person.2",
                                           description: Text(loc.t("tenant.no_selection_desc")))
@@ -67,30 +138,64 @@ struct TenantsView: View {
         .navigationTitle(loc.t("tenant.title"))
         .toolbar {
             if canEdit {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showAdd = true } label: { Label(loc.t("tenant.add"), systemImage: "plus") }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if !isSelectMode {
+                        Button { isSelectMode = true } label: {
+                            Label(loc.t("tenant.select_mode"), systemImage: "checkmark.circle")
+                        }
+                        Button { showAdd = true } label: { Label(loc.t("tenant.add"), systemImage: "plus") }
+                    }
                 }
             }
         }
         .sheet(isPresented: $showAdd) { AddEditTenantView(tenant: nil) }
         .sheet(item: $editTenant) { t in AddEditTenantView(tenant: t) }
+        .confirmationDialog(String(format: loc.t("tenant.archive_confirm"), archiveTarget?.fullName ?? ""),
+                            isPresented: Binding(get: { archiveTarget != nil }, set: { if !$0 { archiveTarget = nil } }),
+                            titleVisibility: .visible) {
+            Button(loc.t("tenant.archive"), role: .none) {
+                if let t = archiveTarget { archiveTenant(t); archiveTarget = nil }
+            }
+        } message: { Text(loc.t("tenant.archive_msg")) }
         .confirmationDialog("\(loc.t("common.delete")) \(deleteTarget?.fullName ?? "")?",
                             isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
                             titleVisibility: .visible) {
             Button(loc.t("common.delete"), role: .destructive) {
-                if let t = deleteTarget {
-                    for contract in t.contracts where contract.status == .active {
-                        contract.status = .terminated
-                    }
-                    // Clean up attached ID document
-                    if let doc = t.idDocumentFilename {
-                        PDFManager.deleteTenantDoc(filename: doc)
-                    }
-                    if selectedTenant == t { selectedTenant = nil }
-                    modelContext.delete(t); try? modelContext.save(); deleteTarget = nil
-                }
+                if let t = deleteTarget { hardDeleteTenant(t); deleteTarget = nil }
             }
         } message: { Text(loc.t("tenant.delete_msg")) }
+        .confirmationDialog(String(format: loc.t("tenant.bulk_archive"), multiSelection.count),
+                            isPresented: $showBulkArchiveConfirm, titleVisibility: .visible) {
+            Button(loc.t("tenant.archive"), role: .none) {
+                for t in selectedTenants { archiveTenant(t) }
+                multiSelection.removeAll(); isSelectMode = false
+            }
+        } message: { Text(loc.t("tenant.bulk_archive_msg")) }
+        .confirmationDialog(String(format: loc.t("tenant.bulk_delete"), multiSelection.count),
+                            isPresented: $showBulkDeleteConfirm, titleVisibility: .visible) {
+            Button(loc.t("common.delete"), role: .destructive) {
+                for t in selectedTenants { hardDeleteTenant(t) }
+                multiSelection.removeAll(); isSelectMode = false
+            }
+        } message: { Text(loc.t("tenant.bulk_delete_msg")) }
+    }
+
+    private func archiveTenant(_ t: Tenant) {
+        t.isArchived = true; t.archivedAt = Date()
+        for contract in t.contracts where contract.status == .active {
+            contract.status = .terminated
+        }
+        if selectedTenant == t { selectedTenant = nil }
+        try? modelContext.save()
+    }
+
+    private func hardDeleteTenant(_ t: Tenant) {
+        for contract in t.contracts where contract.status == .active {
+            contract.status = .terminated
+        }
+        if let doc = t.idDocumentFilename { PDFManager.deleteTenantDoc(filename: doc) }
+        if selectedTenant == t { selectedTenant = nil }
+        modelContext.delete(t); try? modelContext.save()
     }
 }
 
@@ -144,6 +249,7 @@ struct TenantDetail: View {
     let canEdit: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
+    var onArchive: (() -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.loc) var loc
@@ -168,6 +274,12 @@ struct TenantDetail: View {
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 8).padding(.vertical, 3)
                                     .background(Color.indigo).clipShape(Capsule())
+                            }
+                            if tenant.isArchived {
+                                Text("Archived")
+                                    .font(.caption.bold()).foregroundStyle(.white)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.gray).clipShape(Capsule())
                             }
                         }
                         Label(tenant.email, systemImage: "envelope.fill")
@@ -317,6 +429,11 @@ struct TenantDetail: View {
                     }
                     .help(loc.t("tenant.attach_doc_help"))
                     Button(action: onEdit) { Label(loc.t("common.edit"), systemImage: "pencil") }
+                    if let archive = onArchive, !tenant.isArchived {
+                        Button(action: archive) {
+                            Label(loc.t("tenant.archive"), systemImage: "archivebox")
+                        }.foregroundStyle(.orange)
+                    }
                     Button(role: .destructive, action: onDelete) { Label(loc.t("common.delete"), systemImage: "trash") }
                         .foregroundStyle(.red)
                 }

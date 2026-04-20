@@ -19,6 +19,7 @@ struct ApartmentsView: View {
     @State private var showImport = false
     @State private var statusFilter: ApartmentStatus? = nil
     @State private var typeFilter: ApartmentType? = nil
+    @State private var companyFilter: Company? = nil
     @State private var search = ""
 
     var canEdit: Bool { authManager.canPerform(.manageApartments) }
@@ -30,9 +31,10 @@ struct ApartmentsView: View {
                 || apt.displayName.localizedCaseInsensitiveContains(search)
                 || apt.city.localizedCaseInsensitiveContains(search)
                 || apt.apartmentNumber.localizedCaseInsensitiveContains(search)
-            let matchStatus = statusFilter == nil || apt.status == statusFilter
-            let matchType   = typeFilter == nil   || apt.type == typeFilter
-            return matchSearch && matchStatus && matchType
+            let matchStatus  = statusFilter == nil  || apt.status == statusFilter
+            let matchType    = typeFilter == nil    || apt.type == typeFilter
+            let matchCompany = companyFilter == nil || apt.company == companyFilter
+            return matchSearch && matchStatus && matchType && matchCompany
         }
     }
 
@@ -41,7 +43,7 @@ struct ApartmentsView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        HSplitView {
             // MARK: Left Pane
             VStack(spacing: 0) {
                 // Toolbar
@@ -97,9 +99,16 @@ struct ApartmentsView: View {
                 // Filters
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 4) {
-                        FilterChip(label: loc.t("common.all"), selected: typeFilter == nil && statusFilter == nil) {
-                            typeFilter = nil; statusFilter = nil
+                        FilterChip(label: loc.t("common.all"), selected: typeFilter == nil && statusFilter == nil && companyFilter == nil) {
+                            typeFilter = nil; statusFilter = nil; companyFilter = nil
                         }
+                        Divider().frame(height: 16)
+                        ForEach(Company.allCases, id: \.self) { co in
+                            FilterChip(label: co.rawValue, selected: companyFilter == co) {
+                                companyFilter = companyFilter == co ? nil : co
+                            }
+                        }
+                        Divider().frame(height: 16)
                         FilterChip(label: "WG", selected: typeFilter == .wg) {
                             typeFilter = typeFilter == .wg ? nil : .wg
                         }
@@ -143,14 +152,20 @@ struct ApartmentsView: View {
                     }.listStyle(.plain)
                 }
             }
-            .frame(width: 290).background(.background)
-
-            Divider()
+            .frame(minWidth: 220, maxWidth: 360).background(.background)
 
             // Right Pane
             Group {
                 if isSelectMode {
-                    SelectionSummaryView(selected: selectedApartments, onDelete: { showBulkDeleteConfirm = true })
+                    SelectionSummaryView(
+                        title: "\(selectedApartments.count) \(loc.t("apt.title"))",
+                        items: selectedApartments,
+                        nameFor: { $0.displayName },
+                        emptyHint: loc.t("apt.select_hint"),
+                        softActionLabel: nil, softAction: nil,
+                        deleteActionLabel: "\(loc.t("common.delete")) \(selectedApartments.count) \(loc.t("apt.title"))",
+                        deleteAction: { showBulkDeleteConfirm = true }
+                    )
                 } else if let apt = selectedApartment {
                     ApartmentDetail(apartment: apt, canEdit: canEdit,
                                     onEdit: { editApartment = apt }, onDelete: { deleteTarget = apt })
@@ -195,30 +210,37 @@ struct ApartmentsView: View {
     }
 }
 
-// MARK: - Selection Summary
+// MARK: - Selection Summary (generic)
 
-struct SelectionSummaryView: View {
-    let selected: [Apartment]
-    let onDelete: () -> Void
+/// Reusable multi-selection summary panel.
+/// - `softActionLabel`/`softAction`: optional "soft" action (archive, terminate). Pass nil to omit.
+/// - `deleteActionLabel`/`deleteAction`: destructive hard-delete button (always shown when items non-empty).
+struct SelectionSummaryView<T: Identifiable>: View {
+    let title: String                    // e.g. "3 Apartments selected"
+    let items: [T]
+    let nameFor: (T) -> String
+    let emptyHint: String
+    let softActionLabel: String?
+    let softAction: (() -> Void)?
+    let deleteActionLabel: String
+    let deleteAction: () -> Void
     @Environment(\.loc) var loc
 
     var body: some View {
         VStack(spacing: 20) {
-            if selected.isEmpty {
-                ContentUnavailableView(loc.t("apt.no_selection"), systemImage: "checkmark.circle",
-                                       description: Text(loc.t("apt.select_hint")))
+            if items.isEmpty {
+                ContentUnavailableView(title, systemImage: "checkmark.circle",
+                                       description: Text(emptyHint))
             } else {
                 VStack(spacing: 14) {
                     Image(systemName: "checkmark.circle.fill").font(.system(size: 48)).foregroundStyle(Color.accentColor)
-                    Text("\(selected.count) \(loc.t("apt.title"))").font(.title2.bold())
+                    Text(title).font(.title2.bold())
                     ScrollView {
                         VStack(spacing: 6) {
-                            ForEach(selected) { apt in
+                            ForEach(items) { item in
                                 HStack {
-                                    Image(systemName: apt.type.icon).foregroundStyle(.secondary).frame(width: 20)
-                                    Text(apt.displayName).font(.subheadline)
+                                    Text(nameFor(item)).font(.subheadline)
                                     Spacer()
-                                    Text(apt.city).font(.caption).foregroundStyle(.secondary)
                                 }
                                 .padding(.horizontal, 12).padding(.vertical, 6)
                                 .background(.background.secondary).clipShape(RoundedRectangle(cornerRadius: 8))
@@ -226,11 +248,19 @@ struct SelectionSummaryView: View {
                         }
                     }
                     .frame(maxHeight: 260).frame(maxWidth: 440)
-                    Button(role: .destructive, action: onDelete) {
-                        Label("\(loc.t("common.delete")) \(selected.count) \(loc.t("apt.title"))", systemImage: "trash.fill")
-                            .frame(minWidth: 220)
+
+                    HStack(spacing: 12) {
+                        if let label = softActionLabel, let action = softAction {
+                            Button(action: action) {
+                                Label(label, systemImage: "archivebox.fill").frame(minWidth: 160)
+                            }
+                            .buttonStyle(.borderedProminent).tint(.orange)
+                        }
+                        Button(role: .destructive, action: deleteAction) {
+                            Label(deleteActionLabel, systemImage: "trash.fill").frame(minWidth: 160)
+                        }
+                        .buttonStyle(.borderedProminent).tint(.red)
                     }
-                    .buttonStyle(.borderedProminent).tint(.red)
                 }
                 .padding(32)
             }
@@ -243,16 +273,11 @@ struct SelectionSummaryView: View {
 
 struct ApartmentRow: View {
     let apartment: Apartment
-
+    @Environment(\.loc) var loc
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                if apartment.isWG {
-                    Label("WG", systemImage: "person.3.fill")
-                        .font(.caption2.bold()).foregroundStyle(.white)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.purple).clipShape(Capsule())
-                }
                 Text(apartment.displayName).font(.headline).lineLimit(1)
                 Spacer()
                 StatusBadge(text: apartment.status.rawValue, icon: apartment.status.icon)
@@ -299,6 +324,10 @@ struct ApartmentDetail: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
+                            Text(apartment.company.rawValue)
+                                .font(.caption.bold()).foregroundStyle(.white)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(companyColor(apartment.company)).clipShape(Capsule())
                             if apartment.isWG {
                                 Label("WG", systemImage: "person.3.fill")
                                     .font(.caption.bold()).foregroundStyle(.white)
@@ -543,6 +572,7 @@ struct TenantProfileCard: View {
     let tenant: Tenant
     let isExpanded: Bool
     let onToggle: () -> Void
+    @Environment(\.loc) var loc
 
     var activeContract: Contract? { tenant.contracts.first { $0.status == .active } }
 
@@ -593,7 +623,7 @@ struct TenantProfileCard: View {
                             Image(systemName: "doc.text.fill").foregroundStyle(Color.accentColor).frame(width: 20)
                             Text("\(loc.t("contract.title")) \(c.contractNumber)").font(.caption.bold())
                             Spacer()
-                            Text("\(c.startDate.formatted(date: .abbreviated, time: .omitted)) – \(c.endDate.formatted(date: .abbreviated, time: .omitted))")
+                            Text("\(DateFormatter.display.string(from: c.startDate)) – \(DateFormatter.display.string(from: c.endDate)")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -653,6 +683,7 @@ struct AddEditApartmentView: View {
     @State private var rentPrice = 0.0
     @State private var status: ApartmentStatus = .available
     @State private var type: ApartmentType = .standard
+    @State private var company: Company = .privat
     @State private var maxTenants = 2
     @State private var notes = ""
 
@@ -681,6 +712,13 @@ struct AddEditApartmentView: View {
 
             ScrollView {
                 Form {
+                    Section(loc.t("company.title")) {
+                        Picker(loc.t("company.title"), selection: $company) {
+                            ForEach(Company.allCases, id: \.self) {
+                                Label($0.rawValue, systemImage: $0.icon).tag($0)
+                            }
+                        }
+                    }
                     Section(loc.t("apt.type")) {
                         Picker(loc.t("apt.type"), selection: $type) {
                             ForEach(ApartmentType.allCases, id: \.self) {
@@ -756,7 +794,7 @@ struct AddEditApartmentView: View {
                 city = apt.city; postalCode = apt.postalCode; country = apt.country
                 floor = apt.floor; rooms = apt.rooms; bathrooms = apt.bathrooms
                 area = apt.area; rentPrice = apt.rentPrice; status = apt.status
-                type = apt.type; maxTenants = apt.maxTenants; notes = apt.notes
+                type = apt.type; company = apt.company; maxTenants = apt.maxTenants; notes = apt.notes
             }
         }
     }
@@ -767,13 +805,13 @@ struct AddEditApartmentView: View {
             apt.city = city; apt.postalCode = postalCode; apt.country = country
             apt.floor = floor; apt.rooms = rooms; apt.bathrooms = bathrooms
             apt.area = area; apt.rentPrice = rentPrice; apt.status = status
-            apt.type = type; apt.maxTenants = maxTenants; apt.notes = notes
+            apt.type = type; apt.company = company; apt.maxTenants = maxTenants; apt.notes = notes
         } else {
             let apt = Apartment(street: street, gate: gate, apartmentNumber: apartmentNumber,
                                 city: city, postalCode: postalCode, country: country,
                                 floor: floor, rooms: rooms, bathrooms: bathrooms,
                                 area: area, rentPrice: rentPrice, status: status,
-                                type: type, maxTenants: maxTenants, notes: notes)
+                                type: type, company: company, maxTenants: maxTenants, notes: notes)
             modelContext.insert(apt)
         }
         try? modelContext.save()
@@ -833,13 +871,13 @@ struct ContractSummaryRow: View {
     let contract: Contract
     var body: some View {
         HStack {
-            Image(systemName: contract.type.icon).foregroundStyle(.secondary)
+            Image(systemName: contract.category.icon).foregroundStyle(.secondary)
             VStack(alignment: .leading) {
                 HStack(spacing: 6) {
                     Text(contract.contractNumber).font(.caption.bold())
-                    Text("(\(contract.type.rawValue))").font(.caption2).foregroundStyle(.secondary)
+                    Text("(\(contract.category.rawValue))").font(.caption2).foregroundStyle(.secondary)
                 }
-                Text("\(contract.startDate.formatted(date: .abbreviated, time: .omitted)) – \(contract.endDate.formatted(date: .abbreviated, time: .omitted))")
+                Text("\(DateFormatter.display.string(from: contract.startDate)) – \(DateFormatter.display.string(from: contract.endDate)")
                     .font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
@@ -863,6 +901,15 @@ struct PaymentMiniChip: View {
         .padding(.horizontal, 8).padding(.vertical, 3)
         .background(color.opacity(0.1))
         .clipShape(Capsule())
+    }
+}
+
+func companyColor(_ company: Company) -> Color {
+    switch company {
+    case .elfElfImmobilien: return .blue
+    case .elfElfHolding: return .teal
+    case .shermanImmobilien: return .orange
+    case .privat: return .indigo
     }
 }
 

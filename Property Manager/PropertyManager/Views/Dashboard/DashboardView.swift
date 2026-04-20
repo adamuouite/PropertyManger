@@ -25,6 +25,17 @@ struct DashboardView: View {
         }
     }
 
+    func companyMonthlyRevenue(_ company: Company) -> [(label: String, total: Double)] {
+        let companyPayments = payments.filter { $0.contract?.apartment?.company == company }
+        let groups = Dictionary(grouping: companyPayments) { "\($0.year)-\(String(format: "%02d", $0.month))" }
+        return groups.sorted { $0.key < $1.key }.suffix(12).map { _, items in
+            let month = items[0].month
+            let year = items[0].year
+            let total = items.reduce(0) { $0 + $1.effectiveAmount }
+            return (label: "\(month)/\(year)", total: total)
+        }
+    }
+
     var aptStatusData: [(status: ApartmentStatus, count: Int)] {
         ApartmentStatus.allCases.compactMap { status in
             let count = apartments.filter { $0.status == status }.count
@@ -183,7 +194,7 @@ struct DashboardView: View {
                                 message: String(format: loc.t("dash.contract_expires"),
                                     contract.contractNumber,
                                     contract.apartment?.displayName ?? "N/A",
-                                    contract.endDate.formatted(date: .abbreviated, time: .omitted))
+                                    DateFormatter.display.string(from: contract.endDate))
                             )
                         }
                         ForEach(overduePayments, id: \.persistentModelID) { payment in
@@ -199,6 +210,18 @@ struct DashboardView: View {
                     .padding()
                     .background(.background.secondary)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+
+                // MARK: — Per-Company Performance
+                VStack(alignment: .leading, spacing: 12) {
+                    Label(loc.t("dash.company_performance"), systemImage: "chart.bar.xaxis")
+                        .font(.headline)
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(Company.allCases, id: \.self) { company in
+                            CompanyRevenueCard(company: company, data: companyMonthlyRevenue(company))
+                        }
+                    }
                 }
             }
             .padding()
@@ -234,6 +257,54 @@ struct StatCard: View {
             }
         }
         .padding(16)
+        .background(.background.secondary)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+struct CompanyRevenueCard: View {
+    let company: Company
+    let data: [(label: String, total: Double)]
+    @Environment(\.loc) var loc
+
+    var total: Double { data.reduce(0) { $0 + $1.total } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: company.icon)
+                    .foregroundStyle(companyColor(company))
+                Text(company.rawValue).font(.subheadline.bold())
+                Spacer()
+                Text(total.formatted(.currency(code: "EUR")))
+                    .font(.caption.bold())
+                    .foregroundStyle(total >= 0 ? .green : .red)
+            }
+            Text(String(format: loc.t("dash.company_revenue"), company.rawValue))
+                .font(.caption2).foregroundStyle(.secondary)
+
+            if data.isEmpty {
+                ContentUnavailableView(loc.t("rent.no_data"), systemImage: "chart.bar")
+                    .frame(height: 120)
+            } else {
+                Chart {
+                    ForEach(data, id: \.label) { d in
+                        BarMark(
+                            x: .value("Month", d.label),
+                            y: .value("Total", d.total)
+                        )
+                        .foregroundStyle(companyColor(company).gradient)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic) { _ in
+                        AxisValueLabel().font(.caption2)
+                    }
+                }
+                .frame(height: 120)
+            }
+        }
+        .padding()
         .background(.background.secondary)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }

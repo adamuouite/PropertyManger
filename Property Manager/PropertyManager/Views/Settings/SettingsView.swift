@@ -70,12 +70,22 @@ struct SettingsView: View {
                         onChangePassword: { changePasswordUser = user }
                     )
                 } else {
-                    VStack(spacing: 16) {
-                        Image(systemName: "person.circle")
-                            .font(.system(size: 60))
-                            .foregroundStyle(.secondary.opacity(0.4))
-                        Text(loc.t("settings.select_user"))
-                            .foregroundStyle(.secondary)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            VStack(spacing: 16) {
+                                Image(systemName: "person.circle")
+                                    .font(.system(size: 60))
+                                    .foregroundStyle(.secondary.opacity(0.4))
+                                Text(loc.t("settings.select_user"))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+
+                            // Sync status card
+                            SyncStatusView()
+                                .padding(.horizontal, 24)
+                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -102,6 +112,40 @@ struct SettingsView: View {
         } message: {
             Text(loc.t("settings.last_admin"))
         }
+    }
+}
+
+// MARK: - Sync Status
+
+struct SyncStatusView: View {
+    @Environment(\.loc) var loc
+
+    var iCloudURL: URL? { PropertyManagerApp.iCloudStoreURL }
+    var isActive: Bool { iCloudURL != nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(loc.t("settings.sync"), systemImage: "arrow.triangle.2.circlepath")
+                .font(.headline)
+            HStack(spacing: 10) {
+                Image(systemName: isActive ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .foregroundStyle(isActive ? .green : .secondary)
+                Text(isActive ? loc.t("settings.sync.active") : loc.t("settings.sync.inactive"))
+                    .font(.subheadline)
+            }
+            if let url = iCloudURL {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(loc.t("settings.sync.location")).font(.caption).foregroundStyle(.secondary)
+                    Text(url.deletingLastPathComponent().path)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(16)
+        .background(.background.secondary)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -172,7 +216,7 @@ struct UserDetail: View {
                 InfoSection(title: loc.t("settings.role_permissions"), icon: "key.fill") {
                     InfoRow(label: loc.t("settings.role"), value: user.role.rawValue)
                     InfoRow(label: loc.t("settings.can_manage"), value: permissionsText(for: user.role))
-                    InfoRow(label: loc.t("settings.member_since"), value: user.createdAt.formatted(date: .long, time: .omitted))
+                    InfoRow(label: loc.t("settings.member_since"), value: DateFormatter.display.string(from: user.createdAt))
                 }
 
                 // Permissions breakdown

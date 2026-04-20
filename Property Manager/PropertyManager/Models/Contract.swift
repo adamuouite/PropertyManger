@@ -1,14 +1,14 @@
 import SwiftData
 import Foundation
 
-enum ContractType: String, Codable, CaseIterable {
-    case tenant = "Tenant"
-    case landlord = "Landlord"
+enum ContractCategory: String, Codable, CaseIterable {
+    case mietvertrag = "Mietvertrag"
+    case verwaltungsvertrag = "Verwaltungsvertrag"
 
     var icon: String {
         switch self {
-        case .tenant: return "key.fill"
-        case .landlord: return "person.badge.key.fill"
+        case .mietvertrag: return "key.fill"
+        case .verwaltungsvertrag: return "doc.text.fill"
         }
     }
 }
@@ -32,7 +32,7 @@ enum ContractStatus: String, Codable, CaseIterable {
 @Model
 final class Contract {
     var contractNumber: String = ""
-    var typeRaw: String = ContractType.tenant.rawValue
+    var typeRaw: String = ContractCategory.mietvertrag.rawValue
     var statusRaw: String = ContractStatus.active.rawValue
     var startDate: Date = Date()
     var endDate: Date = Date()
@@ -49,9 +49,20 @@ final class Contract {
 
     @Relationship(deleteRule: .cascade) var rentPayments: [RentPayment] = []
 
-    var type: ContractType {
-        get { ContractType(rawValue: typeRaw) ?? .tenant }
+    var category: ContractCategory {
+        get {
+            if let c = ContractCategory(rawValue: typeRaw) { return c }
+            // Legacy migration: map old values
+            if typeRaw == "Tenant" { return .mietvertrag }
+            if typeRaw == "Landlord" { return .verwaltungsvertrag }
+            return .mietvertrag
+        }
         set { typeRaw = newValue.rawValue }
+    }
+
+    var fullTypeLabel: String {
+        let companyName = apartment?.company.rawValue ?? "—"
+        return "\(companyName) \(category.rawValue)"
     }
 
     var status: ContractStatus {
@@ -77,7 +88,7 @@ final class Contract {
 
     init(
         contractNumber: String,
-        type: ContractType,
+        type: ContractCategory,
         startDate: Date,
         endDate: Date,
         rentAmount: Double,
