@@ -240,7 +240,7 @@ struct ContractRow: View {
                 Text(contract.rentAmount.formatted(.currency(code: "EUR")) + " " + loc.t("common.per_month"))
                     .font(.caption.bold()).foregroundStyle(.green)
                 Spacer()
-                Text("\(DateFormatter.display.string(from: contract.startDate)) – \(DateFormatter.display.string(from: contract.endDate)")
+                Text("\(DateFormatter.display.string(from: contract.startDate)) – \(DateFormatter.display.string(from: contract.endDate))")
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
