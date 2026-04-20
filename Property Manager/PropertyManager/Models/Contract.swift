@@ -35,7 +35,7 @@ final class Contract {
     var typeRaw: String = ContractCategory.mietvertrag.rawValue
     var statusRaw: String = ContractStatus.active.rawValue
     var startDate: Date = Date()
-    var endDate: Date = Date()
+    var endDate: Date? = nil
     var rentAmount: Double = 0
     var depositAmount: Double = 0
     var paymentDueDay: Int = 1
@@ -71,6 +71,7 @@ final class Contract {
     }
 
     var durationMonths: Int {
+        guard let endDate else { return 0 }
         let cal = Calendar.current
         let components = cal.dateComponents([.month, .day], from: startDate, to: endDate)
         let months = components.month ?? 0
@@ -79,18 +80,20 @@ final class Contract {
     }
 
     var isExpired: Bool {
-        status == .active && endDate < Date()
+        guard let endDate else { return false }
+        return status == .active && endDate < Date()
     }
 
     var isExpiringSoon: Bool {
-        status == .active && endDate > Date() && endDate.timeIntervalSinceNow < 60 * 60 * 24 * 60
+        guard let endDate else { return false }
+        return status == .active && endDate > Date() && endDate.timeIntervalSinceNow < 60 * 60 * 24 * 60
     }
 
     init(
         contractNumber: String,
         type: ContractCategory,
         startDate: Date,
-        endDate: Date,
+        endDate: Date? = nil,
         rentAmount: Double,
         depositAmount: Double = 0,
         paymentDueDay: Int = 1,

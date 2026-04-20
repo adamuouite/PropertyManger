@@ -194,7 +194,8 @@ struct DashboardView: View {
                                 message: String(format: loc.t("dash.contract_expires"),
                                     contract.contractNumber,
                                     contract.apartment?.displayName ?? "N/A",
-                                    DateFormatter.display.string(from: contract.endDate))
+                                    contract.endDate.map { DateFormatter.display.string(from: $0) } ?? "∞")
+
                             )
                         }
                         ForEach(overduePayments, id: \.persistentModelID) { payment in

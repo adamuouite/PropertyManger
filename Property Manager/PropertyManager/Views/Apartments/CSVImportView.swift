@@ -497,11 +497,6 @@ struct CSVImportView: View {
     /// Called when user taps "Import Now" from preview. Detects duplicates and either
     /// proceeds directly (no dupes) or shows the resolution screen.
     private func beginImport() {
-        let isoParser: DateFormatter = {
-            let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
-            f.dateFormat = "yyyy-MM-dd"; return f
-        }()
-
         var found: [(rowIndex: Int, existing: Apartment)] = []
         for (idx, row) in rows.enumerated() {
             func col(_ i: Int?) -> String {
@@ -641,9 +636,7 @@ struct CSVImportView: View {
                     let rentVal = Double(col(tenantMap.contractRent).replacingOccurrences(of: ",", with: ".")) ?? apt.rentPrice
                     let rawStart = parseDate(col(tenantMap.contractStart)) ?? Date()
                     let startDate = clampDate(rawStart)
-                    let rawEnd = parseDate(col(tenantMap.contractEnd))
-                        ?? Calendar.current.date(byAdding: .year, value: 1, to: startDate) ?? Date()
-                    let endDate = clampDate(rawEnd)
+                    let endDate = parseDate(col(tenantMap.contractEnd)).map { clampDate($0) }
 
                     let catStr = col(tenantMap.contractCategory).lowercased()
                     let category: ContractCategory = catStr.contains("verwalt") ? .verwaltungsvertrag : .mietvertrag

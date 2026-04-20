@@ -382,7 +382,7 @@ struct ExportReportView: View {
                 c.tenant?.fullName ?? "",
                 c.tenant?.tenantNumber ?? "",
                 df.string(from: c.startDate),
-                df.string(from: c.endDate),
+                c.endDate.map { df.string(from: $0) } ?? "",
                 String(format: "%.2f", c.rentAmount),
                 String(format: "%.2f", c.depositAmount),
                 String(c.durationMonths),

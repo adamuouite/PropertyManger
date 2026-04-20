@@ -79,20 +79,19 @@ final class Apartment {
 
     // MARK: - Computed
 
-    /// Display name built from address components: "Gellertgasse 54A · Stiege 1 · Top 6"
+    /// Display name built from address components: "Gellertgasse 54A /1/6"
     var displayName: String {
-        var parts: [String] = []
-        if !street.isEmpty { parts.append(street) }
-        if !gate.isEmpty   { parts.append("Stiege \(gate)") }
-        if !apartmentNumber.isEmpty { parts.append("Top \(apartmentNumber)") }
-        return parts.isEmpty ? "Unnamed Unit" : parts.joined(separator: " · ")
+        var name = street
+        if !gate.isEmpty { name += "/\(gate)" }
+        if !apartmentNumber.isEmpty { name += "/\(apartmentNumber)" }
+        return name.isEmpty ? "Unnamed Unit" : name
     }
 
     /// Short label for list rows: "Top 6" or "Stiege 1 / Top 6"
     var shortLabel: String {
         var parts: [String] = []
-        if !gate.isEmpty { parts.append("Stg. \(gate)") }
-        if !apartmentNumber.isEmpty { parts.append("Top \(apartmentNumber)") }
+        if !gate.isEmpty { parts.append("/\(gate)") }
+        if !apartmentNumber.isEmpty { parts.append("/\(apartmentNumber)") }
         return parts.isEmpty ? street : parts.joined(separator: " / ")
     }
 

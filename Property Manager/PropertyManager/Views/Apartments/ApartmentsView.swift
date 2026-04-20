@@ -623,7 +623,7 @@ struct TenantProfileCard: View {
                             Image(systemName: "doc.text.fill").foregroundStyle(Color.accentColor).frame(width: 20)
                             Text("\(loc.t("contract.title")) \(c.contractNumber)").font(.caption.bold())
                             Spacer()
-                            Text("\(DateFormatter.display.string(from: c.startDate)) – \(DateFormatter.display.string(from: c.endDate)")
+                            Text("\(DateFormatter.display.string(from: c.startDate)) – \(c.endDate.map { DateFormatter.display.string(from: $0) } ?? "∞")")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -877,7 +877,7 @@ struct ContractSummaryRow: View {
                     Text(contract.contractNumber).font(.caption.bold())
                     Text("(\(contract.category.rawValue))").font(.caption2).foregroundStyle(.secondary)
                 }
-                Text("\(DateFormatter.display.string(from: contract.startDate)) – \(DateFormatter.display.string(from: contract.endDate)")
+                Text("\(DateFormatter.display.string(from: contract.startDate)) – \(contract.endDate.map { DateFormatter.display.string(from: $0) } ?? "∞")")
                     .font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()

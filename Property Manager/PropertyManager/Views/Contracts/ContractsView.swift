@@ -240,7 +240,7 @@ struct ContractRow: View {
                 Text(contract.rentAmount.formatted(.currency(code: "EUR")) + " " + loc.t("common.per_month"))
                     .font(.caption.bold()).foregroundStyle(.green)
                 Spacer()
-                Text("\(DateFormatter.display.string(from: contract.startDate)) – \(DateFormatter.display.string(from: contract.endDate)")
+                Text("\(DateFormatter.display.string(from: contract.startDate)) – \(contract.endDate.map { DateFormatter.display.string(from: $0) } ?? "∞")")
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
@@ -281,7 +281,7 @@ struct ContractDetail: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 140))], spacing: 12) {
                     MetricCard(label: loc.t("apt.monthly_rent"), value: contract.rentAmount.formatted(.currency(code: "EUR")), icon: "eurosign.circle.fill", color: .green)
                     MetricCard(label: loc.t("contract.deposit"), value: contract.depositAmount.formatted(.currency(code: "EUR")), icon: "lock.fill", color: .orange)
-                    MetricCard(label: loc.t("contract.duration"), value: "\(contract.durationMonths) \(loc.t("contract.months"))", icon: "calendar", color: .blue)
+                    MetricCard(label: loc.t("contract.duration"), value: contract.endDate == nil ? "∞" : "\(contract.durationMonths) \(loc.t("contract.months"))", icon: "calendar", color: .blue)
                     MetricCard(label: loc.t("contract.due_day"), value: "Day \(contract.paymentDueDay)", icon: "clock.fill", color: .purple)
                 }
 
@@ -421,7 +421,7 @@ struct ContractDetail: View {
                 // Dates
                 InfoSection(title: loc.t("contract.period"), icon: "calendar") {
                     InfoRow(label: loc.t("contract.start"), value: DateFormatter.display.string(from: contract.startDate))
-                    InfoRow(label: loc.t("contract.end"), value: DateFormatter.display.string(from: contract.endDate))
+                    InfoRow(label: loc.t("contract.end"), value: contract.endDate.map { DateFormatter.display.string(from: $0) } ?? "Unbefristet")
                     if contract.isExpiringSoon {
                         HStack {
                             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
@@ -501,6 +501,7 @@ struct AddEditContractView: View {
     @State private var status: ContractStatus = .active
     @State private var startDate = Date()
     @State private var endDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+    @State private var isIndefinite = false
     private let minDate = Calendar.current.date(from: DateComponents(year: 2020, month: 1, day: 1))!
     @State private var rentAmount = 0.0
     @State private var depositAmount = 0.0
@@ -546,7 +547,10 @@ struct AddEditContractView: View {
 
                     Section(loc.t("contract.dates")) {
                         DatePicker(loc.t("contract.start"), selection: $startDate, in: minDate..., displayedComponents: .date)
-                        DatePicker(loc.t("contract.end"), selection: $endDate, in: minDate..., displayedComponents: .date)
+                        Toggle("Indefinite contract", isOn: $isIndefinite)
+                        if !isIndefinite {
+                            DatePicker(loc.t("contract.end"), selection: $endDate, in: minDate..., displayedComponents: .date)
+                        }
                     }
 
                     Section(loc.t("contract.financials")) {
@@ -594,7 +598,9 @@ struct AddEditContractView: View {
         .onAppear {
             if let c = contract {
                 contractNumber = c.contractNumber; category = c.category; status = c.status
-                startDate = c.startDate; endDate = c.endDate; rentAmount = c.rentAmount
+                startDate = c.startDate
+                endDate = c.endDate ?? Calendar.current.date(byAdding: .year, value: 1, to: c.startDate) ?? Date()
+                isIndefinite = c.endDate == nil; rentAmount = c.rentAmount
                 depositAmount = c.depositAmount; paymentDueDay = c.paymentDueDay
                 selectedApartment = c.apartment; selectedTenant = c.tenant; notes = c.notes
             } else {
@@ -606,12 +612,12 @@ struct AddEditContractView: View {
     private func save() {
         if let c = contract {
             c.contractNumber = contractNumber; c.category = category; c.status = status
-            c.startDate = startDate; c.endDate = endDate; c.rentAmount = rentAmount
+            c.startDate = startDate; c.endDate = isIndefinite ? nil : endDate; c.rentAmount = rentAmount
             c.depositAmount = depositAmount; c.paymentDueDay = paymentDueDay
             c.apartment = selectedApartment; c.tenant = selectedTenant; c.notes = notes
         } else {
             let c = Contract(contractNumber: contractNumber, type: category,
-                             startDate: startDate, endDate: endDate,
+                             startDate: startDate, endDate: isIndefinite ? nil : endDate,
                              rentAmount: rentAmount, depositAmount: depositAmount,
                              paymentDueDay: paymentDueDay, notes: notes)
             c.apartment = selectedApartment; c.tenant = selectedTenant; c.status = status
