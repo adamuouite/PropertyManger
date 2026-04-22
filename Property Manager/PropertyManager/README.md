@@ -97,7 +97,6 @@ To back up your data, copy that folder.
 
 ---
 
-## Security Note
+## Security
 
-This app stores passwords as plain text for simplicity (local-only tool).  
-For production use, integrate with `CryptoKit` to hash passwords with SHA-256 or bcrypt.
+Passwords are hashed with SHA-256 via `CryptoKit` before being stored — plain text is never written to disk.
