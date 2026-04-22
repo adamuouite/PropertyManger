@@ -99,7 +99,7 @@ struct LoginView: View {
 
     private func attemptLogin() {
         if let user = users.first(where: {
-            $0.username.lowercased() == username.lowercased() && $0.password == password
+            $0.username.lowercased() == username.lowercased() && $0.password == PasswordHasher.hash(password)
         }) {
             authManager.login(user)
         } else {

@@ -39,7 +39,7 @@ struct RootView: View {
         guard users.isEmpty else { return }
         let admin = AppUser(
             username: "admin",
-            password: "admin123",
+            password: PasswordHasher.hash("admin123"),
             fullName: "Administrator",
             role: .admin
         )

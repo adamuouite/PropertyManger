@@ -350,7 +350,7 @@ struct AddEditUserView: View {
         if let u = user {
             u.fullName = fullName; u.username = username; u.role = role
         } else {
-            let u = AppUser(username: username, password: password, fullName: fullName, role: role)
+            let u = AppUser(username: username, password: PasswordHasher.hash(password), fullName: fullName, role: role)
             modelContext.insert(u)
         }
         try? modelContext.save(); dismiss()
@@ -409,10 +409,10 @@ struct ChangePasswordView: View {
     }
 
     private func update() {
-        if isSelf && user.password != current {
+        if isSelf && user.password != PasswordHasher.hash(current) {
             error = loc.t("settings.wrong_password"); return
         }
-        user.password = newPass
+        user.password = PasswordHasher.hash(newPass)
         try? modelContext.save()
         dismiss()
     }
