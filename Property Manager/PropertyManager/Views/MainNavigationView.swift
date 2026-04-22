@@ -17,7 +17,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .apartments: return "building.2.fill"
         case .contracts: return "doc.text.fill"
         case .tenants: return "person.2.fill"
-        case .owners: return "house.fill"
+        case .owners: return "person.crop.house.fill"
         case .rents: return "eurosign.circle.fill"
         case .settings: return "gearshape.fill"
         }
