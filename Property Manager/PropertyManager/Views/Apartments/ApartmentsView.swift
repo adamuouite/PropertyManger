@@ -685,6 +685,7 @@ struct AddEditApartmentView: View {
     @State private var type: ApartmentType = .standard
     @State private var company: Company = .privat
     @State private var maxTenants = 2
+    @State private var iban = ""
     @State private var notes = ""
 
     var isEditing: Bool { apartment != nil }
@@ -747,6 +748,7 @@ struct AddEditApartmentView: View {
                             TextField(loc.t("apt.city"), text: $city)
                         }
                         TextField(loc.t("apt.country"), text: $country)
+                        TextField("IBAN / Bank account", text: $iban)
                         if !previewName.isEmpty {
                             HStack(spacing: 6) {
                                 Image(systemName: "tag.fill").foregroundStyle(Color.accentColor).font(.caption)
@@ -794,7 +796,8 @@ struct AddEditApartmentView: View {
                 city = apt.city; postalCode = apt.postalCode; country = apt.country
                 floor = apt.floor; rooms = apt.rooms; bathrooms = apt.bathrooms
                 area = apt.area; rentPrice = apt.rentPrice; status = apt.status
-                type = apt.type; company = apt.company; maxTenants = apt.maxTenants; notes = apt.notes
+                type = apt.type; company = apt.company; maxTenants = apt.maxTenants
+                iban = apt.iban; notes = apt.notes
             }
         }
     }
@@ -805,13 +808,15 @@ struct AddEditApartmentView: View {
             apt.city = city; apt.postalCode = postalCode; apt.country = country
             apt.floor = floor; apt.rooms = rooms; apt.bathrooms = bathrooms
             apt.area = area; apt.rentPrice = rentPrice; apt.status = status
-            apt.type = type; apt.company = company; apt.maxTenants = maxTenants; apt.notes = notes
+            apt.type = type; apt.company = company; apt.maxTenants = maxTenants
+            apt.iban = iban; apt.notes = notes
         } else {
             let apt = Apartment(street: street, gate: gate, apartmentNumber: apartmentNumber,
                                 city: city, postalCode: postalCode, country: country,
                                 floor: floor, rooms: rooms, bathrooms: bathrooms,
                                 area: area, rentPrice: rentPrice, status: status,
                                 type: type, company: company, maxTenants: maxTenants, notes: notes)
+            apt.iban = iban
             modelContext.insert(apt)
         }
         try? modelContext.save()

@@ -15,6 +15,7 @@ struct RentsView: View {
     @State private var statusFilter: PaymentStatus? = nil
     @State private var showAddPayment = false
     @State private var showExport = false
+    @State private var showBookkeeping = false
     @State private var editPayment: RentPayment?
     @State private var deleteTarget: RentPayment?
     @State private var isSelectMode = false
@@ -219,11 +220,17 @@ struct RentsView: View {
         .navigationTitle(loc.t("rent.title"))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
+                Button { showBookkeeping = true } label: {
+                    Label("Bookkeeping", systemImage: "doc.badge.gearshape")
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
                 Button { showExport = true } label: {
                     Label(loc.t("export.title"), systemImage: "square.and.arrow.up")
                 }
             }
         }
+        .sheet(isPresented: $showBookkeeping) { BookkeepingExportView() }
         .sheet(isPresented: $showExport) { ExportReportView() }
         .sheet(isPresented: $showAddPayment) {
             AddEditPaymentView(payment: nil, contracts: contracts)
@@ -403,9 +410,7 @@ struct AddEditPaymentView: View {
                     Picker(loc.t("rent.month"), selection: $month) {
                         ForEach(1...12, id: \.self) { m in Text(months[m-1]).tag(m) }
                     }
-                    Picker(loc.t("rent.year"), selection: $year) {
-                        ForEach((2020...2035), id: \.self) { y in Text(String(y)).tag(y) }
-                    }
+                    YearPicker(label: loc.t("rent.year"), year: $year)
                     DatePicker(loc.t("rent.due_date"), selection: $dueDate, in: minDate..., displayedComponents: .date)
                 }
 

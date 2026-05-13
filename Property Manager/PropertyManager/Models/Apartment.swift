@@ -72,6 +72,7 @@ final class Apartment {
     var typeRaw: String = ApartmentType.standard.rawValue
     var maxTenants: Int = 1
     var companyRaw: String = Company.privat.rawValue
+    var iban: String = ""
     var notes: String = ""
     var createdAt: Date = Date()
 
